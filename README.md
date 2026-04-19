@@ -2,6 +2,7 @@
 
 A simple, elegant brewing log for home kombucha brewers. Track every batch from first fermentation to the final taste — no account, no app, no internet required.
 
+
 **[Open the journal →](https://sonjaluja.github.io/kombucha-journal)**
 
 ---
@@ -71,6 +72,11 @@ The dashboard includes a full recipe guide based on real brewing experience:
 Pure HTML, CSS, and vanilla JavaScript — no frameworks, no dependencies, no build step. The whole app is a single file you can read, edit, and understand.
 
 ---
+## Acknowledgements
+
+The recipe, fermentation tips, and flavor notes in this journal 
+are based on advice from Elise Alstad, who introduced me to kombucha 
+brewing and authored the original recipe document. Thank you!
 
 ## License
 
