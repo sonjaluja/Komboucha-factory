@@ -433,6 +433,21 @@ const TIPS_HTML = `
     </div>
     <div class="tip-card">
       <div class="tip-card-header">
+        <div class="tip-icon" style="background:#EBF7F1">🏨</div>
+        <div class="tip-card-title">SCOBY-hotell</div>
+      </div>
+      <ul class="tip-list">
+        <li>Et glass der du oppbevarer ekstra SCOBYer — en sikkerhetskopi hvis en batch blir muggen, og en kilde til dele med venner</li>
+        <li><strong>Start:</strong> Legg SCOBYene i et rent glass og dekk helt med ferdig, usmaksatt kombucha</li>
+        <li><strong>Oppbevaring:</strong> Romtemperatur, unna direkte sollys — aldri i kjøleskap</li>
+        <li><strong>Vedlikehold:</strong> Bytt ut opptil 80 % av væsken med frisk søt te hver 2–6 måned</li>
+        <li><strong>Dekk til</strong> med klede eller lokk — begge fungerer</li>
+        <li>Væsken fra hotellet er utmerket startervæske — veldig moden og syrlig</li>
+        <li><strong>Unngå</strong> smaksatt te i hotellet, kun ren svart eller grønn te</li>
+      </ul>
+    </div>
+    <div class="tip-card">
+      <div class="tip-card-header">
         <div class="tip-icon" style="background:#FDF0F0">⚠️</div>
         <div class="tip-card-title">Viktige tips</div>
       </div>
@@ -507,7 +522,7 @@ function renderList() {
 const EMPTY_BATCH = () => ({
   name:'', startDate:new Date().toISOString().slice(0,10),
   f1:{teaType:'',teaAmount:'',sugarType:'',sugarAmount:'',waterAmount:'',scoby:'',starterTea:'',temperature:'',pHStart:'',pHEnd:'',duration:'',notes:''},
-  f2:{bottles:[{size:'',ingredients:[{ingredient:'',amount:''}]}], temperature:'',duration:'',notes:''},
+  f2:{bottles:[{count:'',size:'',ingredients:[{ingredient:'',amount:''}]}], temperature:'',duration:'',notes:''},
   results:{taste:'',sweetness:0,acidity:0,carbonation:0,overall:0,notes:''}
 });
 let formState = {};
@@ -521,7 +536,8 @@ function initFormState() {
     const oldBottles = f2.bottleItems?.filter(x=>x.count||x.size) || (f2.bottleCount||f2.bottleSize ? [{count:f2.bottleCount||'',size:f2.bottleSize||''}] : []);
     if (oldBottles.length) {
       f2.bottles = oldBottles.map((b,i) => ({
-        size: (b.count ? b.count+' × ' : '') + (b.size||''),
+        count: b.count||'',
+        size: b.size||'',
         ingredients: i===0 ? (ingredients.length ? ingredients : [{ingredient:'',amount:''}]) : [{ingredient:'',amount:''}]
       }));
     } else {
@@ -544,6 +560,10 @@ function renderBottles() {
     <div class="bottle-card" id="bottle-card-${bi}">
       <div class="bottle-card-header">
         <span class="bottle-number">Flaske ${bi+1}</span>
+        <input type="text" placeholder="Antall" value="${esc(bottle.count||'')}"
+          oninput="formState.f2.bottles[${bi}].count=this.value"
+          style="flex:0 0 64px;font-size:13px;padding:6px 9px;text-align:center">
+        <span style="font-size:13px;color:var(--text-muted);flex-shrink:0">×</span>
         <input type="text" placeholder="Størrelse (f.eks. 500 ml)" value="${esc(bottle.size)}"
           oninput="formState.f2.bottles[${bi}].size=this.value"
           style="flex:1;font-size:13px;padding:6px 9px">
@@ -570,7 +590,7 @@ function renderIngredientRows(bi, ingredients) {
     </div>`).join('');
 }
 
-function addBottle()       { collectSimple(); formState.f2.bottles.push({size:'',ingredients:[{ingredient:'',amount:''}]}); refreshBottles(); }
+function addBottle()       { collectSimple(); formState.f2.bottles.push({count:'',size:'',ingredients:[{ingredient:'',amount:''}]}); refreshBottles(); }
 function removeBottle(bi)  { collectSimple(); formState.f2.bottles.splice(bi,1); refreshBottles(); }
 function addIngredient(bi) { collectSimple(); formState.f2.bottles[bi].ingredients.push({ingredient:'',amount:''}); refreshBottles(); }
 function removeIngredient(bi,ii) { collectSimple(); formState.f2.bottles[bi].ingredients.splice(ii,1); refreshBottles(); }
@@ -578,11 +598,24 @@ function refreshBottles()  { document.getElementById('bottle-list').innerHTML = 
 
 function starInput(label, field, val) {
   const btns=[1,2,3,4,5].map(n=>`<button type="button" class="star-btn${n<=val?' active':''}" onclick="setStar('${field}',${n})">★</button>`).join('');
-  return `<div class="rating-row"><span class="rating-label">${label}</span><div class="stars-input" id="stars-${field}">${btns}</div></div>`;
+  const notRated = val===0 ? `<span style="font-size:12px;color:var(--text-muted);font-style:italic">Ikke vurdert</span>` : `<button type="button" onclick="setStar('${field}',0)" style="background:none;border:none;font-size:12px;color:var(--text-muted);cursor:pointer;padding:0;text-decoration:underline">Fjern</button>`;
+  return `<div class="rating-row">
+    <span class="rating-label">${label}</span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="stars-input" id="stars-${field}">${btns}</div>
+      <div id="stars-label-${field}" style="min-width:70px">${notRated}</div>
+    </div>
+  </div>`;
 }
 function setStar(field, val) {
-  formState.results[field]=val;
-  document.querySelectorAll(`#stars-${field} .star-btn`).forEach((b,i)=>b.classList.toggle('active',i<val));
+  const current = formState.results[field] || 0;
+  const newVal = (current === val) ? 0 : val; // click same star = clear
+  formState.results[field] = newVal;
+  document.querySelectorAll(`#stars-${field} .star-btn`).forEach((b,i)=>b.classList.toggle('active',i<newVal));
+  const labelEl = document.getElementById('stars-label-'+field);
+  if (labelEl) labelEl.innerHTML = newVal===0
+    ? `<span style="font-size:12px;color:var(--text-muted);font-style:italic">Ikke vurdert</span>`
+    : `<button type="button" onclick="setStar('${field}',0)" style="background:none;border:none;font-size:12px;color:var(--text-muted);cursor:pointer;padding:0;text-decoration:underline">Fjern</button>`;
 }
 
 function renderForm(b) {
@@ -715,7 +748,8 @@ function renderDetail(b, idx) {
       return `<div style="margin-bottom:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:${ings.length?'8px':'0'}">
           <span style="font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Flaske ${bi+1}</span>
-          ${bottle.size?`<span style="font-size:13px;color:var(--text-muted)">— ${esc(bottle.size)}</span>`:''}
+          ${bottle.count?`<span style="font-size:13px;font-weight:500;color:var(--text)">${esc(bottle.count)} ×</span>`:''}
+          ${bottle.size?`<span style="font-size:13px;color:var(--text-muted)">${esc(bottle.size)}</span>`:''}
         </div>
         ${ings.length?`<div class="pill-list">${ings.map(x=>`<span class="pill">${esc(x.ingredient)}${x.amount?`<span class="amount">— ${esc(x.amount)}</span>`:''}</span>`).join('')}</div>`:'<span style="font-size:13px;color:var(--text-muted);font-style:italic">Ingen ingredienser registrert</span>'}
       </div>`;
