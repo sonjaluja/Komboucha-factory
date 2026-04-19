@@ -158,6 +158,10 @@
   #toast { position:fixed; bottom:24px; right:24px; background:var(--text); color:#fff; padding:10px 18px; border-radius:var(--radius); font-size:13px; opacity:0; transition:opacity 0.25s; pointer-events:none; z-index:999; }
   #toast.show { opacity:1; }
 
+  .bottle-card { border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:10px; background:var(--surface); }
+  .bottle-card-header { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .bottle-number { font-size:11px; font-weight:500; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; white-space:nowrap; }
+
   /* Tips section */
   .tips-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin-bottom:12px; }
   .tip-card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px 20px; }
@@ -254,6 +258,11 @@ function fmtDate(iso) {
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function stars(n, sz) { n=n||0; return `<span style="color:var(--amber);font-size:${sz||'14px'}">${'★'.repeat(n)}${'☆'.repeat(5-n)}</span>`; }
 function flavorSummary(b) {
+  const bottles = b.f2?.bottles;
+  if (bottles?.length) {
+    const all = bottles.flatMap(bt=>bt.ingredients||[]).map(x=>x.ingredient).filter(Boolean);
+    return [...new Set(all)].join(', ');
+  }
   const it = b.f2?.flavoringItems;
   if (it?.length) return it.map(x=>x.ingredient).filter(Boolean).join(', ');
   return b.f2?.flavorings || '';
@@ -287,21 +296,20 @@ function renderDashboard() {
     <div class="empty"><div class="empty-icon">🫙</div><p>Ingen batches ennå — lag ditt første brygg!</p></div>
     ${renderTips()}`;
 
-  const rated = batches.filter(b=>b.results?.overall);
-  const avg = key => rated.length ? (rated.reduce((s,b)=>s+(b.results[key]||0),0)/rated.length).toFixed(1) : null;
-  const avgO = avg('overall'), avgA = avg('acidity'), avgC = avg('carbonation');
-
   const teaCount = {};
   batches.forEach(b=>{ const t=b.f1?.teaType; if(t) teaCount[t]=(teaCount[t]||0)+1; });
   const topTea = Object.entries(teaCount).sort((a,b)=>b[1]-a[1])[0];
 
   const flavorCount = {};
   batches.forEach(b=>{
-    const it=b.f2?.flavoringItems;
-    if (it?.length) it.forEach(x=>{ if(x.ingredient){ const k=x.ingredient.toLowerCase(); flavorCount[k]=(flavorCount[k]||0)+1; }});
-    else if (b.f2?.flavorings) b.f2.flavorings.split(',').forEach(s=>{
-      const k=s.trim().split(' ')[0].toLowerCase(); if(k) flavorCount[k]=(flavorCount[k]||0)+1;
-    });
+    const bottles = b.f2?.bottles;
+    if (bottles?.length) {
+      bottles.flatMap(bt=>bt.ingredients||[]).forEach(x=>{ if(x.ingredient){ const k=x.ingredient.toLowerCase(); flavorCount[k]=(flavorCount[k]||0)+1; }});
+    } else {
+      const it=b.f2?.flavoringItems;
+      if (it?.length) it.forEach(x=>{ if(x.ingredient){ const k=x.ingredient.toLowerCase(); flavorCount[k]=(flavorCount[k]||0)+1; }});
+      else if (b.f2?.flavorings) b.f2.flavorings.split(',').forEach(s=>{ const k=s.trim().split(' ')[0].toLowerCase(); if(k) flavorCount[k]=(flavorCount[k]||0)+1; });
+    }
   });
   const topFlavors = Object.entries(flavorCount).sort((a,b)=>b[1]-a[1]).slice(0,12);
 
@@ -314,27 +322,17 @@ function renderDashboard() {
       <div><p class="page-title">Oversikt</p></div>
       <button class="btn btn-primary" onclick="render('new')">+ Ny batch</button>
     </div>
-    <div class="stat-grid">
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));max-width:480px">
       <div class="stat-card">
         <div class="stat-label">Totalt brygg</div>
         <div class="stat-value">${batches.length}</div>
-        <div class="stat-sub">${topTea?'Flest: '+esc(topTea[0]):'Kom i gang!'}</div>
+        <div class="stat-sub">${topTea?'Mest brukt te: '+esc(topTea[0]):'Kom i gang!'}</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Snittkarakter</div>
-        <div class="stat-value">${avgO?avgO+'<span style="font-size:16px;color:var(--text-muted)">/5</span>':'<span style="color:var(--text-muted)">–</span>'}</div>
-        ${avgO?`<div class="stat-stars">${'★'.repeat(Math.round(avgO))}${'☆'.repeat(5-Math.round(avgO))}</div>`:''}
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Snitt syrlighet</div>
-        <div class="stat-value">${avgA?avgA+'<span style="font-size:16px;color:var(--text-muted)">/5</span>':'<span style="color:var(--text-muted)">–</span>'}</div>
-        ${avgA?`<div class="stat-stars">${'★'.repeat(Math.round(avgA))}${'☆'.repeat(5-Math.round(avgA))}</div>`:''}
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Snitt kullsyre</div>
-        <div class="stat-value">${avgC?avgC+'<span style="font-size:16px;color:var(--text-muted)">/5</span>':'<span style="color:var(--text-muted)">–</span>'}</div>
-        ${avgC?`<div class="stat-stars">${'★'.repeat(Math.round(avgC))}${'☆'.repeat(5-Math.round(avgC))}</div>`:''}
-      </div>
+      ${best?.results?.overall?`<div class="stat-card">
+        <div class="stat-label">Beste batch</div>
+        <div class="stat-value" style="font-size:18px">${esc(best.name||'Uten navn')}</div>
+        <div class="stat-stars">${'★'.repeat(best.results.overall)}${'☆'.repeat(5-best.results.overall)}</div>
+      </div>`:''}
     </div>
     <div class="dash-two-col">
       <div>
@@ -509,16 +507,29 @@ function renderList() {
 const EMPTY_BATCH = () => ({
   name:'', startDate:new Date().toISOString().slice(0,10),
   f1:{teaType:'',teaAmount:'',sugarType:'',sugarAmount:'',waterAmount:'',scoby:'',starterTea:'',temperature:'',pHStart:'',pHEnd:'',duration:'',notes:''},
-  f2:{flavoringItems:[{ingredient:'',amount:''}], bottleItems:[{count:'',size:''}], temperature:'',duration:'',notes:''},
-  results:{taste:'',sweetness:3,acidity:3,carbonation:3,overall:3,notes:''}
+  f2:{bottles:[{size:'',ingredients:[{ingredient:'',amount:''}]}], temperature:'',duration:'',notes:''},
+  results:{taste:'',sweetness:0,acidity:0,carbonation:0,overall:0,notes:''}
 });
 let formState = {};
 
 function initFormState() {
   formState = editingIdx!==null ? JSON.parse(JSON.stringify(batches[editingIdx])) : EMPTY_BATCH();
   const f2 = formState.f2;
-  if (!f2.flavoringItems) f2.flavoringItems = f2.flavorings ? [{ingredient:f2.flavorings,amount:''}] : [{ingredient:'',amount:''}];
-  if (!f2.bottleItems) f2.bottleItems = (f2.bottleCount||f2.bottleSize) ? [{count:f2.bottleCount||'',size:f2.bottleSize||''}] : [{count:'',size:''}];
+  // Migrate old format to new bottles structure
+  if (!f2.bottles) {
+    const ingredients = f2.flavoringItems?.filter(x=>x.ingredient) || (f2.flavorings ? [{ingredient:f2.flavorings,amount:''}] : []);
+    const oldBottles = f2.bottleItems?.filter(x=>x.count||x.size) || (f2.bottleCount||f2.bottleSize ? [{count:f2.bottleCount||'',size:f2.bottleSize||''}] : []);
+    if (oldBottles.length) {
+      f2.bottles = oldBottles.map((b,i) => ({
+        size: (b.count ? b.count+' × ' : '') + (b.size||''),
+        ingredients: i===0 ? (ingredients.length ? ingredients : [{ingredient:'',amount:''}]) : [{ingredient:'',amount:''}]
+      }));
+    } else {
+      f2.bottles = [{size:'', ingredients: ingredients.length ? ingredients : [{ingredient:'',amount:''}]}];
+    }
+  }
+  // Ensure each bottle has at least one ingredient row
+  f2.bottles.forEach(b => { if (!b.ingredients?.length) b.ingredients=[{ingredient:'',amount:''}]; });
 }
 
 function fld(label, id, val, opts={}) {
@@ -528,29 +539,42 @@ function fld(label, id, val, opts={}) {
   return `<div class="form-field${cls}"><label for="${id}">${label}</label><input type="${type}" id="${id}" value="${esc(val)}" placeholder="${ph}"></div>`;
 }
 
-function renderFlavorRows() {
-  return (formState.f2.flavoringItems||[]).map((item,i)=>`
-    <div class="dynamic-row">
-      <input type="text" placeholder="Ingrediens (f.eks. ingefær)" value="${esc(item.ingredient)}" oninput="formState.f2.flavoringItems[${i}].ingredient=this.value">
-      <input type="text" class="narrow" placeholder="Mengde" value="${esc(item.amount)}" oninput="formState.f2.flavoringItems[${i}].amount=this.value">
-      ${formState.f2.flavoringItems.length>1?`<button class="btn-icon remove" onclick="removeDynamic('flavoringItems',${i})">×</button>`:'<div style="width:28px;flex-shrink:0"></div>'}
-    </div>`).join('');
-}
-function renderBottleRows() {
-  return (formState.f2.bottleItems||[]).map((item,i)=>`
-    <div class="dynamic-row">
-      <input type="text" class="narrow" placeholder="Antall" value="${esc(item.count)}" oninput="formState.f2.bottleItems[${i}].count=this.value">
-      <input type="text" placeholder="Størrelse (f.eks. 500 ml)" value="${esc(item.size)}" oninput="formState.f2.bottleItems[${i}].size=this.value">
-      ${formState.f2.bottleItems.length>1?`<button class="btn-icon remove" onclick="removeDynamic('bottleItems',${i})">×</button>`:'<div style="width:28px;flex-shrink:0"></div>'}
+function renderBottles() {
+  return (formState.f2.bottles||[]).map((bottle, bi) => `
+    <div class="bottle-card" id="bottle-card-${bi}">
+      <div class="bottle-card-header">
+        <span class="bottle-number">Flaske ${bi+1}</span>
+        <input type="text" placeholder="Størrelse (f.eks. 500 ml)" value="${esc(bottle.size)}"
+          oninput="formState.f2.bottles[${bi}].size=this.value"
+          style="flex:1;font-size:13px;padding:6px 9px">
+        ${formState.f2.bottles.length>1?`<button class="btn-icon remove" onclick="removeBottle(${bi})" title="Fjern flaske">×</button>`:''}
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;display:flex;gap:8px;padding-right:${formState.f2.bottles.length>1?'0':'0'}">
+        <span style="flex:1">Ingrediens</span><span style="width:90px;flex-shrink:0">Mengde</span><span style="width:28px"></span>
+      </div>
+      <div class="dynamic-list" id="ing-list-${bi}">
+        ${renderIngredientRows(bi, bottle.ingredients)}
+      </div>
+      <button class="add-row-btn" style="margin-top:6px" onclick="addIngredient(${bi})">+ Legg til ingrediens</button>
     </div>`).join('');
 }
 
-function addDynamic(list, empty) { collectSimple(); formState.f2[list].push(empty); refreshDynamic(); }
-function removeDynamic(list, i) { collectSimple(); formState.f2[list].splice(i,1); refreshDynamic(); }
-function refreshDynamic() {
-  document.getElementById('flavoring-list').innerHTML = renderFlavorRows();
-  document.getElementById('bottle-list').innerHTML = renderBottleRows();
+function renderIngredientRows(bi, ingredients) {
+  return (ingredients||[]).map((item, ii) => `
+    <div class="dynamic-row">
+      <input type="text" placeholder="Ingrediens (f.eks. bringebær)" value="${esc(item.ingredient)}"
+        oninput="formState.f2.bottles[${bi}].ingredients[${ii}].ingredient=this.value">
+      <input type="text" class="narrow" placeholder="Mengde" value="${esc(item.amount)}"
+        oninput="formState.f2.bottles[${bi}].ingredients[${ii}].amount=this.value">
+      ${ingredients.length>1?`<button class="btn-icon remove" onclick="removeIngredient(${bi},${ii})">×</button>`:'<div style="width:28px;flex-shrink:0"></div>'}
+    </div>`).join('');
 }
+
+function addBottle()       { collectSimple(); formState.f2.bottles.push({size:'',ingredients:[{ingredient:'',amount:''}]}); refreshBottles(); }
+function removeBottle(bi)  { collectSimple(); formState.f2.bottles.splice(bi,1); refreshBottles(); }
+function addIngredient(bi) { collectSimple(); formState.f2.bottles[bi].ingredients.push({ingredient:'',amount:''}); refreshBottles(); }
+function removeIngredient(bi,ii) { collectSimple(); formState.f2.bottles[bi].ingredients.splice(ii,1); refreshBottles(); }
+function refreshBottles()  { document.getElementById('bottle-list').innerHTML = renderBottles(); }
 
 function starInput(label, field, val) {
   const btns=[1,2,3,4,5].map(n=>`<button type="button" class="star-btn${n<=val?' active':''}" onclick="setStar('${field}',${n})">★</button>`).join('');
@@ -610,19 +634,10 @@ function renderForm(b) {
       </div>
 
       <div class="tab-panel" data-panel="2">
-        <div class="section-label"><div class="section-accent" style="background:var(--coral)"></div><span>Smakstilsetninger</span></div>
-        <div style="display:flex;gap:8px;font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;padding-right:36px">
-          <span style="flex:1">Ingrediens</span><span style="width:90px;flex-shrink:0">Mengde</span>
-        </div>
-        <div class="dynamic-list" id="flavoring-list">${renderFlavorRows()}</div>
-        <button class="add-row-btn" onclick="addDynamic('flavoringItems',{ingredient:'',amount:''})">+ Legg til ingrediens</button>
-
-        <div class="section-label" style="margin-top:24px"><div class="section-accent" style="background:var(--coral)"></div><span>Flasker</span></div>
-        <div style="display:flex;gap:8px;font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;padding-right:36px">
-          <span style="width:90px;flex-shrink:0">Antall</span><span style="flex:1">Størrelse</span>
-        </div>
-        <div class="dynamic-list" id="bottle-list">${renderBottleRows()}</div>
-        <button class="add-row-btn" onclick="addDynamic('bottleItems',{count:'',size:''})">+ Legg til flaskestørrelse</button>
+        <div class="section-label"><div class="section-accent" style="background:var(--coral)"></div><span>Flasker og smakstilsetninger</span></div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Legg til én flaske per rad — hver flaske har sin egen størrelse og ingredienser.</p>
+        <div id="bottle-list">${renderBottles()}</div>
+        <button class="add-row-btn" onclick="addBottle()">+ Legg til flaske</button>
 
         <div class="section-label" style="margin-top:24px"><div class="section-accent" style="background:var(--coral)"></div><span>Prosess</span></div>
         <div class="form-grid">
@@ -692,15 +707,25 @@ function renderDetail(b, idx) {
 
   const row = (label,val) => val?`<div class="detail-row"><span class="detail-key">${label}</span><span>${esc(val)}</span></div>`:'';
 
-  const flavorItems = f2.flavoringItems?.filter(x=>x.ingredient);
-  const flavorHTML = flavorItems?.length
-    ? `<div style="margin:10px 0"><p style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Smakstilsetninger</p><div class="pill-list">${flavorItems.map(x=>`<span class="pill">${esc(x.ingredient)}${x.amount?`<span class="amount">— ${esc(x.amount)}</span>`:''}</span>`).join('')}</div></div>`
-    : f2.flavorings ? row('Smakstilsetning', f2.flavorings) : '';
-
-  const bottleItems = f2.bottleItems?.filter(x=>x.count||x.size);
-  const bottleHTML = bottleItems?.length
-    ? `<div style="margin:10px 0"><p style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Flasker</p><div class="pill-list">${bottleItems.map(x=>`<span class="pill">${x.count?esc(x.count)+' ×':''} ${esc(x.size||'')}`.trim()+`</span>`).join('')}</div></div>`
-    : (f2.bottleCount||f2.bottleSize) ? row('Flasker', `${f2.bottleCount||''} × ${f2.bottleSize||''}`.trim()) : '';
+  // Build F2 bottles HTML
+  let bottlesDetailHTML = '';
+  if (f2.bottles?.length) {
+    bottlesDetailHTML = f2.bottles.map((bottle, bi) => {
+      const ings = (bottle.ingredients||[]).filter(x=>x.ingredient);
+      return `<div style="margin-bottom:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${ings.length?'8px':'0'}">
+          <span style="font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Flaske ${bi+1}</span>
+          ${bottle.size?`<span style="font-size:13px;color:var(--text-muted)">— ${esc(bottle.size)}</span>`:''}
+        </div>
+        ${ings.length?`<div class="pill-list">${ings.map(x=>`<span class="pill">${esc(x.ingredient)}${x.amount?`<span class="amount">— ${esc(x.amount)}</span>`:''}</span>`).join('')}</div>`:'<span style="font-size:13px;color:var(--text-muted);font-style:italic">Ingen ingredienser registrert</span>'}
+      </div>`;
+    }).join('');
+  } else {
+    // Backward compat
+    const flavorItems = f2.flavoringItems?.filter(x=>x.ingredient);
+    if (flavorItems?.length) bottlesDetailHTML = `<div class="pill-list" style="margin:8px 0">${flavorItems.map(x=>`<span class="pill">${esc(x.ingredient)}${x.amount?`<span class="amount">— ${esc(x.amount)}</span>`:''}</span>`).join('')}</div>`;
+    else if (f2.flavorings) bottlesDetailHTML = row('Smakstilsetning', f2.flavorings);
+  }
 
   return `
     <div class="breadcrumb"><a onclick="render('list')">← Alle brygg</a></div>
@@ -726,7 +751,7 @@ function renderDetail(b, idx) {
       ${f1.notes?`<p class="detail-note">${esc(f1.notes)}</p>`:''}
 
       <div class="section-label"><div class="section-accent" style="background:var(--coral)"></div><span>F2 — Andre fermentering / kullsyrning</span></div>
-      ${flavorHTML}${bottleHTML}
+      ${bottlesDetailHTML}
       ${row('Temperatur',f2.temperature?f2.temperature+' °C':'')}
       ${row('Varighet',f2.duration?f2.duration+' dager':'')}
       ${f2.notes?`<p class="detail-note">${esc(f2.notes)}</p>`:''}
