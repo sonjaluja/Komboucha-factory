@@ -186,14 +186,59 @@
   .timing-val { color:var(--text-muted); line-height:1.5; }
 
   @media (max-width:620px) {
-    main { padding:20px 14px 60px; }
-    .card { padding:18px 16px; }
+    main { padding:16px 12px 80px; }
+    .card { padding:16px 14px; }
     .batch-grid,.dash-two-col { grid-template-columns:1fr; }
     .stat-grid { grid-template-columns:repeat(2,1fr); }
-    .detail-key { min-width:110px; }
+    .detail-key { min-width:100px; }
     .form-grid { grid-template-columns:1fr; }
-    .dynamic-row input.narrow { flex:0 0 72px; }
-    .header-nav .nav-btn { padding:6px 8px; }
+    .dynamic-row input.narrow { flex:0 0 64px; }
+    .timing-label { min-width:100px; }
+
+    /* Header — hide export/import on mobile, keep nav */
+    .header-nav .btn-secondary { display:none; }
+    .header-nav { gap:2px; }
+    .nav-btn { padding:6px 10px; font-size:13px; }
+    .logo h1 { font-size:16px; }
+    .header-inner { height:52px; }
+
+    /* Tabs scroll nicely */
+    .tab { padding:8px 12px; font-size:13px; }
+
+    /* Bottle card header wraps on small screens */
+    .bottle-card-header { flex-wrap:wrap; gap:6px; }
+    .bottle-number { width:100%; }
+
+    /* Tips grid single column */
+    .tips-grid { grid-template-columns:1fr; }
+
+    /* Fruit chips smaller */
+    .fruit-chip { font-size:11px; padding:3px 8px; }
+
+    /* Form fields full width */
+    .form-field { grid-column:1/-1; }
+
+    /* Detail rows wrap on very small screens */
+    .detail-row { flex-direction:column; gap:2px; }
+    .detail-key { min-width:unset; font-size:12px; }
+
+    /* Star buttons easier to tap */
+    .star-btn { font-size:28px; }
+
+    /* Bigger tap targets for buttons */
+    .btn-icon { width:34px; height:34px; }
+    .add-row-btn { padding:10px 12px; font-size:14px; }
+
+    /* Page title smaller */
+    .page-title { font-size:19px; }
+    .detail-title { font-size:20px; }
+
+    /* Toast bottom padding for home indicator */
+    #toast { bottom:32px; right:12px; left:12px; text-align:center; }
+    /* Mobile menu button — only visible on mobile */
+    @media (max-width:620px) {
+      .mobile-menu-btn { display:inline-flex !important; }
+    }
   }
 </style>
 </head>
@@ -213,7 +258,15 @@
         ↑ Importer
         <input type="file" accept=".json" onchange="importData(event)" style="display:none">
       </label>
+      <button class="btn btn-secondary btn-sm mobile-menu-btn" onclick="toggleMobileMenu()" style="display:none;margin-left:4px">⋯</button>
     </div>
+  </div>
+  <div id="mobile-menu" style="display:none;background:var(--white);border-top:1px solid var(--border);padding:10px 16px;gap:8px;flex-direction:column">
+    <button class="btn btn-secondary" style="width:100%;justify-content:center" onclick="exportData();toggleMobileMenu()">↓ Eksporter data</button>
+    <label class="btn btn-secondary" style="width:100%;justify-content:center;cursor:pointer">
+      ↑ Importer data
+      <input type="file" accept=".json" onchange="importData(event);toggleMobileMenu()" style="display:none">
+    </label>
   </div>
 </header>
 
@@ -224,6 +277,11 @@
 const STORAGE_KEY = 'kombucha_batches_v2';
 let batches = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(batches)); }
+
+function toggleMobileMenu() {
+  const m = document.getElementById('mobile-menu');
+  m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+}
 
 function toast(msg) {
   const el = document.getElementById('toast');
@@ -257,14 +315,20 @@ function fmtDate(iso) {
 }
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function stars(n, sz) { n=n||0; return `<span style="color:var(--amber);font-size:${sz||'14px'}">${'★'.repeat(n)}${'☆'.repeat(5-n)}</span>`; }
-function flavorSummary(b) {
-  const bottles = b.f2?.bottles;
-  if (bottles?.length) {
-    const all = bottles.flatMap(bt=>bt.ingredients||[]).map(x=>x.ingredient).filter(Boolean);
-    return [...new Set(all)].join(', ');
+function batchOverall(b) {
+  const fr = b.results?.flavorRatings;
+  if (fr?.length) {
+    const rated = fr.filter(x=>x.overall>0);
+    if (rated.length) return Math.round(rated.reduce((s,x)=>s+x.overall,0)/rated.length);
   }
-  const it = b.f2?.flavoringItems;
-  if (it?.length) return it.map(x=>x.ingredient).filter(Boolean).join(', ');
+  return b.results?.overall || 0;
+}
+function flavorSummary(b) {
+  const fl = b.f2?.flavors;
+  if (fl?.length) return fl.map(x=>x.name).filter(Boolean).join(', ');
+  // backward compat
+  const bt = b.f2?.bottles;
+  if (bt?.length) return bt.flatMap(b=>(b.ingredients||[])).map(x=>x.ingredient).filter(Boolean).join(', ');
   return b.f2?.flavorings || '';
 }
 
@@ -302,18 +366,17 @@ function renderDashboard() {
 
   const flavorCount = {};
   batches.forEach(b=>{
-    const bottles = b.f2?.bottles;
-    if (bottles?.length) {
-      bottles.flatMap(bt=>bt.ingredients||[]).forEach(x=>{ if(x.ingredient){ const k=x.ingredient.toLowerCase(); flavorCount[k]=(flavorCount[k]||0)+1; }});
-    } else {
-      const it=b.f2?.flavoringItems;
-      if (it?.length) it.forEach(x=>{ if(x.ingredient){ const k=x.ingredient.toLowerCase(); flavorCount[k]=(flavorCount[k]||0)+1; }});
+    const fl=b.f2?.flavors;
+    if (fl?.length) fl.forEach(x=>{ if(x.name){ const k=x.name.toLowerCase(); flavorCount[k]=(flavorCount[k]||0)+1; }});
+    else {
+      const bt=b.f2?.bottles;
+      if (bt?.length) bt.flatMap(bt=>bt.ingredients||[]).forEach(x=>{ if(x.ingredient){ const k=x.ingredient.toLowerCase(); flavorCount[k]=(flavorCount[k]||0)+1; }});
       else if (b.f2?.flavorings) b.f2.flavorings.split(',').forEach(s=>{ const k=s.trim().split(' ')[0].toLowerCase(); if(k) flavorCount[k]=(flavorCount[k]||0)+1; });
     }
   });
   const topFlavors = Object.entries(flavorCount).sort((a,b)=>b[1]-a[1]).slice(0,12);
 
-  const best = batches.reduce((b,x)=>(!b||(x.results?.overall||0)>(b.results?.overall||0))?x:b, null);
+  const best = batches.reduce((b,x)=>(!b||batchOverall(x)>batchOverall(b))?x:b, null);
   const bestIdx = batches.indexOf(best);
   const recent = batches.slice(0,5);
 
@@ -328,10 +391,10 @@ function renderDashboard() {
         <div class="stat-value">${batches.length}</div>
         <div class="stat-sub">${topTea?'Mest brukt te: '+esc(topTea[0]):'Kom i gang!'}</div>
       </div>
-      ${best?.results?.overall?`<div class="stat-card">
+      ${batchOverall(best)>0?`<div class="stat-card">
         <div class="stat-label">Beste batch</div>
         <div class="stat-value" style="font-size:18px">${esc(best.name||'Uten navn')}</div>
-        <div class="stat-stars">${'★'.repeat(best.results.overall)}${'☆'.repeat(5-best.results.overall)}</div>
+        <div class="stat-stars">${'★'.repeat(batchOverall(best))}${'☆'.repeat(5-batchOverall(best))}</div>
       </div>`:''}
     </div>
     <div class="dash-two-col">
@@ -345,7 +408,7 @@ function renderDashboard() {
                 <div class="recent-date">${fmtDate(b.startDate)}</div>
               </div>
               <div class="recent-right">
-                ${b.results?.overall?stars(b.results.overall,'12px'):'<span style="font-size:12px;color:var(--text-muted)">Ikke vurdert</span>'}
+                ${batchOverall(b)>0?stars(batchOverall(b),'12px'):'<span style="font-size:12px;color:var(--text-muted)">Ikke vurdert</span>'}
                 ${flavorSummary(b)?`<div class="recent-flavor">${esc(flavorSummary(b))}</div>`:''}
               </div>
             </div>`).join('')}
@@ -353,21 +416,26 @@ function renderDashboard() {
         ${batches.length>5?`<button class="btn btn-ghost" style="margin-top:10px;width:100%;justify-content:center" onclick="render('list')">Se alle ${batches.length} brygg →</button>`:''}
       </div>
       <div>
-        <p class="dash-section-title">Beste batch</p>
-        ${best?.results?.overall?`
-          <div class="recent-item" onclick="render('detail',${bestIdx})">
-            <div style="min-width:0">
-              <div class="recent-name">${esc(best.name||'Uten navn')}</div>
-              <div class="recent-date">${fmtDate(best.startDate)}</div>
+        <p class="dash-section-title">${(()=>{const last=batches[0]; return esc(last?.name||'Batch');})()} — pågående fermentering</p>
+        ${(()=>{
+          const last = batches[0];
+          if (!last?.startDate) return '<p style="font-size:13px;color:var(--text-muted)">Ingen batches ennå.</p>';
+          const totalDays = Math.floor((Date.now() - new Date(last.startDate)) / 86400000);
+          const f1Days = parseInt(last.f1?.duration) || null;
+          const inF2 = f1Days && totalDays > f1Days;
+          const displayDays = inF2 ? totalDays - f1Days : totalDays;
+          const phase = inF2 ? 'F2' : 'F1';
+          const dayWord = displayDays === 1 ? 'dag' : 'dager';
+          return `<div class="recent-item" onclick="render('detail',0)" style="flex-direction:column;align-items:flex-start;gap:6px">
+            <div style="display:flex;align-items:baseline;gap:8px">
+              <span style="font-size:40px;font-family:'Playfair Display',serif;color:var(--amber);line-height:1">${displayDays}</span>
+              <span style="font-size:15px;color:var(--text-muted)">${dayWord} i ${phase}</span>
             </div>
-            <div class="recent-right">
-              ${stars(best.results.overall,'14px')}
-              ${flavorSummary(best)?`<div class="recent-flavor">${esc(flavorSummary(best))}</div>`:''}
+            <div>
+              <div style="font-size:12px;color:var(--text-muted)">Startet ${fmtDate(last.startDate)}${inF2?' · F1 ferdig etter '+f1Days+' dager':''}</div>
             </div>
-          </div>` : '<p style="font-size:13px;color:var(--text-muted)">Ingen vurderinger ennå.</p>'}
-        <p class="dash-section-title" style="margin-top:24px">Smakstilsetninger brukt</p>
-        ${topFlavors.length?`<div class="flavor-tags">${topFlavors.map(([f,n])=>`<span class="flavor-tag">${esc(f)}<span class="count">×${n}</span></span>`).join('')}</div>`
-          :'<p style="font-size:13px;color:var(--text-muted)">Ingen ennå.</p>'}
+          </div>`;
+        })()}
       </div>
     </div>
     ${renderTips()}`;
@@ -375,7 +443,6 @@ function renderDashboard() {
 
 const TIPS_HTML = `
   <p class="dash-section-title" style="margin-bottom:14px">Oppskrift og tips</p>
-  <img src="Bottles_after_F1.jpeg" alt="Kombucha flasker etter F1" style="width:100%; max-height:280px; object-fit:cover; border-radius:12px; margin-bottom:16px">
 
   <div class="tip-alert">
     <strong>Grunnoppskrift:</strong> Per liter te brukes 0,5–0,6 dl sukker · 300–350 ml startervæske per 3 L · 5–8 poser te (eller 2–3 ss løs te) per 3 L
@@ -513,7 +580,7 @@ function renderList() {
     <div class="batch-card" onclick="render('detail',${i})">
       <div class="batch-card-header">
         <div><div class="batch-card-name">${esc(b.name||'Uten navn')}</div><div class="batch-card-date">${fmtDate(b.startDate)}</div></div>
-        ${b.results?.overall?stars(b.results.overall):''}
+        ${batchOverall(b)>0?stars(batchOverall(b)):''}
       </div>
       ${flavorSummary(b)?`<div class="batch-card-flavor">${esc(flavorSummary(b))}</div>`:''}
     </div>`).join('')}</div>`;
@@ -522,31 +589,48 @@ function renderList() {
 // ─── Form ─────────────────────────────────────────────────────────────────────
 const EMPTY_BATCH = () => ({
   name:'', startDate:new Date().toISOString().slice(0,10),
-  f1:{teaType:'',teaAmount:'',sugarType:'',sugarAmount:'',waterAmount:'',scoby:'',starterTea:'',temperature:'',pHStart:'',pHEnd:'',duration:'',notes:''},
-  f2:{bottles:[{count:'',size:'',ingredients:[{ingredient:'',amount:''}]}], temperature:'',duration:'',notes:''},
-  results:{taste:'',sweetness:0,acidity:0,carbonation:0,overall:0,notes:''}
+  f1:{teaType:'',teaAmount:'',sugarType:'',sugarAmount:'',waterAmount:'',starterTea:'',temperature:'',duration:'',notes:''},
+  f2:{flavors:[{name:'',count:'',size:''}], temperature:'',duration:'',notes:''},
+  results:{flavorRatings:[], notes:''}
 });
 let formState = {};
 
 function initFormState() {
   formState = editingIdx!==null ? JSON.parse(JSON.stringify(batches[editingIdx])) : EMPTY_BATCH();
   const f2 = formState.f2;
-  // Migrate old format to new bottles structure
-  if (!f2.bottles) {
-    const ingredients = f2.flavoringItems?.filter(x=>x.ingredient) || (f2.flavorings ? [{ingredient:f2.flavorings,amount:''}] : []);
-    const oldBottles = f2.bottleItems?.filter(x=>x.count||x.size) || (f2.bottleCount||f2.bottleSize ? [{count:f2.bottleCount||'',size:f2.bottleSize||''}] : []);
-    if (oldBottles.length) {
-      f2.bottles = oldBottles.map((b,i) => ({
-        count: b.count||'',
-        size: b.size||'',
-        ingredients: i===0 ? (ingredients.length ? ingredients : [{ingredient:'',amount:''}]) : [{ingredient:'',amount:''}]
+
+  // Migrate old bottles/flavoringItems → new flavors
+  if (!f2.flavors) {
+    if (f2.bottles?.length) {
+      f2.flavors = f2.bottles.map(b => ({
+        name: (b.ingredients||[]).map(x=>x.ingredient).filter(Boolean).join(' + ') || '',
+        count: b.count||'', size: b.size||''
       }));
+    } else if (f2.flavoringItems?.length) {
+      f2.flavors = f2.flavoringItems.filter(x=>x.ingredient).map(x=>({name:x.ingredient, count:'', size:''}));
     } else {
-      f2.bottles = [{size:'', ingredients: ingredients.length ? ingredients : [{ingredient:'',amount:''}]}];
+      f2.flavors = [{name:'',count:'',size:''}];
     }
   }
-  // Ensure each bottle has at least one ingredient row
-  f2.bottles.forEach(b => { if (!b.ingredients?.length) b.ingredients=[{ingredient:'',amount:''}]; });
+  if (!f2.flavors.length) f2.flavors = [{name:'',count:'',size:''}];
+
+  // Ensure results has flavorRatings array
+  const r = formState.results;
+  if (!r.flavorRatings) r.flavorRatings = [];
+
+  // Sync flavor rating entries to match current flavors
+  syncFlavorRatings();
+}
+
+function syncFlavorRatings() {
+  const flavors = formState.f2.flavors;
+  const existing = formState.results.flavorRatings || [];
+  formState.results.flavorRatings = flavors.map((fl, i) => ({
+    name: fl.name || `Smak ${i+1}`,
+    taste:'',
+    sweetness:0, acidity:0, carbonation:0, overall:0, notes:'',
+    ...(existing[i] || {})
+  }));
 }
 
 function fld(label, id, val, opts={}) {
@@ -556,67 +640,75 @@ function fld(label, id, val, opts={}) {
   return `<div class="form-field${cls}"><label for="${id}">${label}</label><input type="${type}" id="${id}" value="${esc(val)}" placeholder="${ph}"></div>`;
 }
 
-function renderBottles() {
-  return (formState.f2.bottles||[]).map((bottle, bi) => `
-    <div class="bottle-card" id="bottle-card-${bi}">
+function renderFlavors() {
+  return (formState.f2.flavors||[]).map((fl, fi) => `
+    <div class="bottle-card">
       <div class="bottle-card-header">
-        <span class="bottle-number">Flaske ${bi+1}</span>
-        <input type="text" placeholder="Antall" value="${esc(bottle.count||'')}"
-          oninput="formState.f2.bottles[${bi}].count=this.value"
-          style="flex:0 0 64px;font-size:13px;padding:6px 9px;text-align:center">
-        <span style="font-size:13px;color:var(--text-muted);flex-shrink:0">×</span>
-        <input type="text" placeholder="Størrelse (f.eks. 500 ml)" value="${esc(bottle.size)}"
-          oninput="formState.f2.bottles[${bi}].size=this.value"
+        <span class="bottle-number">Smak ${fi+1}</span>
+        <input type="text" placeholder="Navn på smak (f.eks. Bringebær)" value="${esc(fl.name)}"
+          oninput="formState.f2.flavors[${fi}].name=this.value;updateFlavorRatingName(${fi},this.value)"
           style="flex:1;font-size:13px;padding:6px 9px">
-        ${formState.f2.bottles.length>1?`<button class="btn-icon remove" onclick="removeBottle(${bi})" title="Fjern flaske">×</button>`:''}
+        ${formState.f2.flavors.length>1?`<button class="btn-icon remove" onclick="removeFlavor(${fi})">×</button>`:''}
       </div>
-      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;display:flex;gap:8px;padding-right:${formState.f2.bottles.length>1?'0':'0'}">
-        <span style="flex:1">Ingrediens</span><span style="width:90px;flex-shrink:0">Mengde</span><span style="width:28px"></span>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <div style="flex:0 0 64px">
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">Antall</label>
+          <input type="text" placeholder="f.eks. 3" value="${esc(fl.count)}"
+            oninput="formState.f2.flavors[${fi}].count=this.value"
+            style="width:100%;font-size:13px;padding:6px 9px;text-align:center">
+        </div>
+        <span style="color:var(--text-muted);margin-top:18px">×</span>
+        <div style="flex:1">
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">Flaskestørrelse</label>
+          <input type="text" placeholder="f.eks. 500 ml" value="${esc(fl.size)}"
+            oninput="formState.f2.flavors[${fi}].size=this.value"
+            style="width:100%;font-size:13px;padding:6px 9px">
+        </div>
       </div>
-      <div class="dynamic-list" id="ing-list-${bi}">
-        ${renderIngredientRows(bi, bottle.ingredients)}
-      </div>
-      <button class="add-row-btn" style="margin-top:6px" onclick="addIngredient(${bi})">+ Legg til ingrediens</button>
     </div>`).join('');
 }
 
-function renderIngredientRows(bi, ingredients) {
-  return (ingredients||[]).map((item, ii) => `
-    <div class="dynamic-row">
-      <input type="text" placeholder="Ingrediens (f.eks. bringebær)" value="${esc(item.ingredient)}"
-        oninput="formState.f2.bottles[${bi}].ingredients[${ii}].ingredient=this.value">
-      <input type="text" class="narrow" placeholder="Mengde" value="${esc(item.amount)}"
-        oninput="formState.f2.bottles[${bi}].ingredients[${ii}].amount=this.value">
-      ${ingredients.length>1?`<button class="btn-icon remove" onclick="removeIngredient(${bi},${ii})">×</button>`:'<div style="width:28px;flex-shrink:0"></div>'}
-    </div>`).join('');
+function addFlavor()      { collectSimple(); formState.f2.flavors.push({name:'',count:'',size:''}); syncFlavorRatings(); refreshFlavors(); }
+function removeFlavor(fi) { collectSimple(); formState.f2.flavors.splice(fi,1); syncFlavorRatings(); refreshFlavors(); }
+function refreshFlavors() { document.getElementById('flavor-list').innerHTML = renderFlavors(); }
+function updateFlavorRatingName(fi, name) {
+  if (formState.results.flavorRatings[fi]) formState.results.flavorRatings[fi].name = name || `Smak ${fi+1}`;
 }
 
-function addBottle()       { collectSimple(); formState.f2.bottles.push({count:'',size:'',ingredients:[{ingredient:'',amount:''}]}); refreshBottles(); }
-function removeBottle(bi)  { collectSimple(); formState.f2.bottles.splice(bi,1); refreshBottles(); }
-function addIngredient(bi) { collectSimple(); formState.f2.bottles[bi].ingredients.push({ingredient:'',amount:''}); refreshBottles(); }
-function removeIngredient(bi,ii) { collectSimple(); formState.f2.bottles[bi].ingredients.splice(ii,1); refreshBottles(); }
-function refreshBottles()  { document.getElementById('bottle-list').innerHTML = renderBottles(); }
-
-function starInput(label, field, val) {
-  const btns=[1,2,3,4,5].map(n=>`<button type="button" class="star-btn${n<=val?' active':''}" onclick="setStar('${field}',${n})">★</button>`).join('');
-  const notRated = val===0 ? `<span style="font-size:12px;color:var(--text-muted);font-style:italic">Ikke vurdert</span>` : `<button type="button" onclick="setStar('${field}',0)" style="background:none;border:none;font-size:12px;color:var(--text-muted);cursor:pointer;padding:0;text-decoration:underline">Fjern</button>`;
+function starInput(label, field, val, flavorIdx) {
+  const key = flavorIdx!==undefined ? `fl${flavorIdx}_${field}` : field;
+  const btns=[1,2,3,4,5].map(n=>`<button type="button" class="star-btn${n<=val?' active':''}" onclick="setStar('${field}',${n},${flavorIdx!==undefined?flavorIdx:'undefined'})">★</button>`).join('');
+  const notRated = val===0
+    ? `<span style="font-size:12px;color:var(--text-muted);font-style:italic">Ikke vurdert</span>`
+    : `<button type="button" onclick="setStar('${field}',0,${flavorIdx!==undefined?flavorIdx:'undefined'})" style="background:none;border:none;font-size:12px;color:var(--text-muted);cursor:pointer;padding:0;text-decoration:underline">Fjern</button>`;
   return `<div class="rating-row">
     <span class="rating-label">${label}</span>
     <div style="display:flex;align-items:center;gap:10px">
-      <div class="stars-input" id="stars-${field}">${btns}</div>
-      <div id="stars-label-${field}" style="min-width:70px">${notRated}</div>
+      <div class="stars-input" id="stars-${key}">${btns}</div>
+      <div id="stars-label-${key}" style="min-width:70px">${notRated}</div>
     </div>
   </div>`;
 }
-function setStar(field, val) {
-  const current = formState.results[field] || 0;
-  const newVal = (current === val) ? 0 : val; // click same star = clear
-  formState.results[field] = newVal;
-  document.querySelectorAll(`#stars-${field} .star-btn`).forEach((b,i)=>b.classList.toggle('active',i<newVal));
-  const labelEl = document.getElementById('stars-label-'+field);
+
+function setStar(field, val, flavorIdx) {
+  const key = flavorIdx!==undefined ? `fl${flavorIdx}_${field}` : field;
+  let current;
+  if (flavorIdx !== undefined) {
+    current = formState.results.flavorRatings[flavorIdx]?.[field] || 0;
+  } else {
+    current = formState.results[field] || 0;
+  }
+  const newVal = (current === val) ? 0 : val;
+  if (flavorIdx !== undefined) {
+    if (formState.results.flavorRatings[flavorIdx]) formState.results.flavorRatings[flavorIdx][field] = newVal;
+  } else {
+    formState.results[field] = newVal;
+  }
+  document.querySelectorAll(`#stars-${key} .star-btn`).forEach((b,i)=>b.classList.toggle('active',i<newVal));
+  const labelEl = document.getElementById('stars-label-'+key);
   if (labelEl) labelEl.innerHTML = newVal===0
     ? `<span style="font-size:12px;color:var(--text-muted);font-style:italic">Ikke vurdert</span>`
-    : `<button type="button" onclick="setStar('${field}',0)" style="background:none;border:none;font-size:12px;color:var(--text-muted);cursor:pointer;padding:0;text-decoration:underline">Fjern</button>`;
+    : `<button type="button" onclick="setStar('${field}',0,${flavorIdx!==undefined?flavorIdx:'undefined'})" style="background:none;border:none;font-size:12px;color:var(--text-muted);cursor:pointer;padding:0;text-decoration:underline">Fjern</button>`;
 }
 
 function renderForm(b) {
@@ -652,26 +744,20 @@ function renderForm(b) {
           ${fld('Mengde sukker','f-f1-sugarAmount',d.f1.sugarAmount,{ph:'F.eks. 200 g'})}
           ${fld('Mengde vann','f-f1-waterAmount',d.f1.waterAmount,{ph:'F.eks. 2 L'})}
         </div>
-        <div class="section-label"><div class="section-accent" style="background:var(--teal)"></div><span>SCOBY og startervæske</span></div>
+        <div class="section-label"><div class="section-accent" style="background:var(--teal)"></div><span>Prosess</span></div>
         <div class="form-grid">
-          ${fld('SCOBY (størrelse / tilstand)','f-f1-scoby',d.f1.scoby,{ph:'Stor, frisk, ny baby...'})}
-          ${fld('Startervæske','f-f1-starterTea',d.f1.starterTea,{ph:'F.eks. 200 ml'})}
-        </div>
-        <div class="section-label"><div class="section-accent" style="background:var(--teal)"></div><span>Prosess og målinger</span></div>
-        <div class="form-grid">
+          ${fld('Startervæske','f-f1-starterTea',d.f1.starterTea,{ph:'F.eks. 300 ml'})}
           ${fld('Temperatur (°C)','f-f1-temperature',d.f1.temperature,{ph:'F.eks. 23'})}
-          ${fld('pH ved start','f-f1-pHStart',d.f1.pHStart,{ph:'F.eks. 3.8'})}
           ${fld('Antall dager','f-f1-duration',d.f1.duration,{ph:'F.eks. 8'})}
-          ${fld('pH ved avslutning','f-f1-pHEnd',d.f1.pHEnd,{ph:'F.eks. 3.1'})}
           ${fld('Notater','f-f1-notes',d.f1.notes,{type:'textarea',ph:'Observasjoner underveis...',full:true})}
         </div>
       </div>
 
       <div class="tab-panel" data-panel="2">
-        <div class="section-label"><div class="section-accent" style="background:var(--coral)"></div><span>Flasker og smakstilsetninger</span></div>
-        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Legg til én flaske per rad — hver flaske har sin egen størrelse og ingredienser.</p>
-        <div id="bottle-list">${renderBottles()}</div>
-        <button class="add-row-btn" onclick="addBottle()">+ Legg til flaske</button>
+        <div class="section-label"><div class="section-accent" style="background:var(--coral)"></div><span>Smaksvarianter</span></div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Legg til én rad per smak — med antall flasker og størrelse for hver variant.</p>
+        <div id="flavor-list">${renderFlavors()}</div>
+        <button class="add-row-btn" onclick="addFlavor()">+ Legg til smaksvariant</button>
 
         <div class="section-label" style="margin-top:24px"><div class="section-accent" style="background:var(--coral)"></div><span>Prosess</span></div>
         <div class="form-grid">
@@ -682,18 +768,23 @@ function renderForm(b) {
       </div>
 
       <div class="tab-panel" data-panel="3">
-        <div class="section-label"><div class="section-accent" style="background:var(--teal)"></div><span>Smaksbeskrivelse</span></div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px">Vurder hver smaksvariant fra F2. Fyll inn når du har smakt!</p>
+        ${d.results.flavorRatings.map((fr, fi) => `
+          <div class="bottle-card" style="margin-bottom:12px">
+            <div style="font-size:14px;font-weight:500;margin-bottom:12px;color:var(--text)">${esc(fr.name||`Smak ${fi+1}`)}</div>
+            <div style="border:1px solid var(--border);border-radius:var(--radius);padding:6px 14px;margin-bottom:10px">
+              ${starInput('Sødme','sweetness',fr.sweetness,fi)}
+              ${starInput('Syrlighet','acidity',fr.acidity,fi)}
+              ${starInput('Kullsyre','carbonation',fr.carbonation,fi)}
+              ${starInput('Helhetsvurdering','overall',fr.overall,fi)}
+            </div>
+            <textarea placeholder="Smaksnotater for ${esc(fr.name||`smak ${fi+1}`)}..." rows="2"
+              oninput="formState.results.flavorRatings[${fi}].notes=this.value"
+              style="width:100%;font-family:var(--font-sans,inherit);font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);resize:vertical"
+              >${esc(fr.notes)}</textarea>
+          </div>`).join('')}
+        <div class="section-label" style="margin-top:8px"><div class="section-accent" style="background:var(--teal)"></div><span>Generelle notater</span></div>
         <div class="form-grid">
-          ${fld('Smaksprofil','f-results-taste',d.results.taste,{type:'textarea',ph:'Frisk, syrlig, fruktig, lett nøtteaktig...',full:true})}
-        </div>
-        <div class="section-label"><div class="section-accent" style="background:var(--teal)"></div><span>Vurdering</span></div>
-        <div style="border:1px solid var(--border);border-radius:var(--radius);padding:6px 14px">
-          ${starInput('Sødme','sweetness',d.results.sweetness)}
-          ${starInput('Syrlighet','acidity',d.results.acidity)}
-          ${starInput('Kullsyre','carbonation',d.results.carbonation)}
-          ${starInput('Helhetsvurdering','overall',d.results.overall)}
-        </div>
-        <div class="form-grid" style="margin-top:14px">
           ${fld('Notater til neste batch','f-results-notes',d.results.notes,{type:'textarea',ph:'Hva ville du gjort annerledes?',full:true})}
         </div>
       </div>
@@ -709,14 +800,13 @@ function renderForm(b) {
 }
 
 function collectSimple() {
-  const g = (id,def='') => { const el=document.getElementById(id); return el?el.value:def; };
+  const g = (id) => { const el=document.getElementById(id); return el?el.value:''; };
   formState.name = g('f-name');
   formState.startDate = g('f-startDate');
-  ['teaType','teaAmount','sugarType','sugarAmount','waterAmount','scoby','starterTea','temperature','pHStart','pHEnd','duration','notes']
+  ['teaType','teaAmount','sugarType','sugarAmount','waterAmount','starterTea','temperature','duration','notes']
     .forEach(k => { const el=document.getElementById('f-f1-'+k); if(el) formState.f1[k]=el.value; });
   ['temperature','duration','notes']
     .forEach(k => { const el=document.getElementById('f-f2-'+k); if(el) formState.f2[k]=el.value; });
-  const t=document.getElementById('f-results-taste'); if(t) formState.results.taste=t.value;
   const n=document.getElementById('f-results-notes'); if(n) formState.results.notes=n.value;
 }
 
@@ -734,33 +824,50 @@ function saveBatch() {
   render(editingIdx!==null?'detail':'list', editingIdx!==null?editingIdx:0);
 }
 
-// ─── Detail ───────────────────────────────────────────────────────────────────
 function renderDetail(b, idx) {
   const f1=b.f1||{}, f2=b.f2||{}, r=b.results||{};
-  const ph=(f1.pHStart||f1.pHEnd)?`${f1.pHStart||'–'} → ${f1.pHEnd||'–'}`:null;
-
   const row = (label,val) => val?`<div class="detail-row"><span class="detail-key">${label}</span><span>${esc(val)}</span></div>`:'';
 
-  // Build F2 bottles HTML
-  let bottlesDetailHTML = '';
-  if (f2.bottles?.length) {
-    bottlesDetailHTML = f2.bottles.map((bottle, bi) => {
-      const ings = (bottle.ingredients||[]).filter(x=>x.ingredient);
-      return `<div style="margin-bottom:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${ings.length?'8px':'0'}">
-          <span style="font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Flaske ${bi+1}</span>
-          ${bottle.count?`<span style="font-size:13px;font-weight:500;color:var(--text)">${esc(bottle.count)} ×</span>`:''}
-          ${bottle.size?`<span style="font-size:13px;color:var(--text-muted)">${esc(bottle.size)}</span>`:''}
-        </div>
-        ${ings.length?`<div class="pill-list">${ings.map(x=>`<span class="pill">${esc(x.ingredient)}${x.amount?`<span class="amount">— ${esc(x.amount)}</span>`:''}</span>`).join('')}</div>`:'<span style="font-size:13px;color:var(--text-muted);font-style:italic">Ingen ingredienser registrert</span>'}
+  // F2 flavors
+  let flavorsHTML = '';
+  if (f2.flavors?.length) {
+    flavorsHTML = f2.flavors.map((fl,fi) => {
+      const parts = [fl.count, fl.size].filter(Boolean);
+      const qty = fl.count && fl.size ? `${fl.count} × ${fl.size}` : parts.join(' ');
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F0E8DF">
+        <span style="font-size:13px;font-weight:500;flex:1">${esc(fl.name||`Smak ${fi+1}`)}</span>
+        ${qty?`<span class="pill">${esc(qty)}</span>`:''}
       </div>`;
     }).join('');
-  } else {
-    // Backward compat
-    const flavorItems = f2.flavoringItems?.filter(x=>x.ingredient);
-    if (flavorItems?.length) bottlesDetailHTML = `<div class="pill-list" style="margin:8px 0">${flavorItems.map(x=>`<span class="pill">${esc(x.ingredient)}${x.amount?`<span class="amount">— ${esc(x.amount)}</span>`:''}</span>`).join('')}</div>`;
-    else if (f2.flavorings) bottlesDetailHTML = row('Smakstilsetning', f2.flavorings);
+  } else if (f2.bottles?.length) {
+    // backward compat
+    flavorsHTML = f2.bottles.map((bt,bi)=>{
+      const ings=(bt.ingredients||[]).filter(x=>x.ingredient).map(x=>esc(x.ingredient)).join(' + ')||`Smak ${bi+1}`;
+      const qty=bt.count&&bt.size?`${bt.count} × ${bt.size}`:'';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F0E8DF">
+        <span style="font-size:13px;font-weight:500;flex:1">${ings}</span>
+        ${qty?`<span class="pill">${esc(qty)}</span>`:''}
+      </div>`;
+    }).join('');
   }
+
+  // Results per flavor
+  const flavorRatings = r.flavorRatings || [];
+  const hasRatings = flavorRatings.some(fr=>fr.overall||fr.sweetness||fr.acidity||fr.carbonation);
+  const ratingsHTML = flavorRatings.map((fr,fi) => {
+    const rated = fr.overall||fr.sweetness||fr.acidity||fr.carbonation;
+    return `<div class="bottle-card" style="margin-bottom:10px">
+      <div style="font-size:14px;font-weight:500;margin-bottom:10px">${esc(fr.name||`Smak ${fi+1}`)}</div>
+      ${rated?`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">
+        ${[['Sødme',fr.sweetness],['Syrlighet',fr.acidity],['Kullsyre',fr.carbonation],['Helhet',fr.overall]].map(([l,v])=>`
+          <div style="background:var(--amber-pale);border-radius:var(--radius);padding:8px 10px">
+            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">${l}</div>
+            <div style="font-size:14px;color:var(--amber)">${v?'★'.repeat(v)+'☆'.repeat(5-v):'–'}</div>
+          </div>`).join('')}
+      </div>` : '<span style="font-size:13px;color:var(--text-muted);font-style:italic">Ikke vurdert ennå</span>'}
+      ${fr.notes?`<p class="detail-note" style="margin-top:8px">${esc(fr.notes)}</p>`:''}
+    </div>`;
+  }).join('');
 
   return `
     <div class="breadcrumb"><a onclick="render('list')">← Alle brygg</a></div>
@@ -779,28 +886,20 @@ function renderDetail(b, idx) {
       <div class="section-label" style="margin-top:24px"><div class="section-accent" style="background:var(--amber)"></div><span>F1 — Første fermentering</span></div>
       ${row('Tetype',f1.teaType)}${row('Mengde te',f1.teaAmount)}
       ${row('Sukkertype',f1.sugarType)}${row('Mengde sukker',f1.sugarAmount)}${row('Mengde vann',f1.waterAmount)}
-      ${row('SCOBY',f1.scoby)}${row('Startervæske',f1.starterTea)}
+      ${row('Startervæske',f1.starterTea)}
       ${row('Temperatur',f1.temperature?f1.temperature+' °C':'')}
-      ${row('pH start → slutt',ph)}
       ${row('Varighet',f1.duration?f1.duration+' dager':'')}
       ${f1.notes?`<p class="detail-note">${esc(f1.notes)}</p>`:''}
 
-      <div class="section-label"><div class="section-accent" style="background:var(--coral)"></div><span>F2 — Andre fermentering / kullsyrning</span></div>
-      ${bottlesDetailHTML}
+      <div class="section-label"><div class="section-accent" style="background:var(--coral)"></div><span>F2 — Smaksvarianter</span></div>
+      ${flavorsHTML}
       ${row('Temperatur',f2.temperature?f2.temperature+' °C':'')}
       ${row('Varighet',f2.duration?f2.duration+' dager':'')}
       ${f2.notes?`<p class="detail-note">${esc(f2.notes)}</p>`:''}
 
-      <div class="section-label"><div class="section-accent" style="background:var(--teal)"></div><span>Resultat</span></div>
-      ${r.taste?`<p style="font-size:15px;line-height:1.6;margin-bottom:14px">${esc(r.taste)}</p>`:''}
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
-        ${[['Sødme',r.sweetness],['Syrlighet',r.acidity],['Kullsyre',r.carbonation],['Helhet',r.overall]].map(([l,v])=>`
-          <div style="background:var(--amber-pale);border-radius:var(--radius);padding:10px 12px">
-            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${l}</div>
-            <div style="font-size:15px;color:var(--amber)">${v?'★'.repeat(v)+'☆'.repeat(5-v):'–'}</div>
-          </div>`).join('')}
-      </div>
-      ${r.notes?`<p class="detail-note" style="margin-top:14px">${esc(r.notes)}</p>`:''}
+      <div class="section-label"><div class="section-accent" style="background:var(--teal)"></div><span>Resultat per smak</span></div>
+      ${flavorRatings.length ? ratingsHTML : '<p style="font-size:13px;color:var(--text-muted);font-style:italic">Ingen vurderinger ennå — legg til via Rediger.</p>'}
+      ${r.notes?`<p class="detail-note" style="margin-top:10px"><strong>Notater:</strong> ${esc(r.notes)}</p>`:''}
     </div>`;
 }
 
@@ -813,7 +912,38 @@ function deleteBatch(idx) {
 function bindEvents() {
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      if (currentView==='new'||currentView==='edit') collectSimple();
+      if (currentView==='new'||currentView==='edit') {
+        collectSimple();
+        // Sync flavor ratings names when switching to results tab
+        if (tab.dataset.tab === '3') {
+          syncFlavorRatings();
+          // Re-render results panel with updated names
+          const panel = document.querySelector('[data-panel="3"]');
+          if (panel) {
+            const d = formState;
+            panel.innerHTML = `
+              <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px">Vurder hver smaksvariant fra F2. Fyll inn når du har smakt!</p>
+              ${d.results.flavorRatings.map((fr, fi) => `
+                <div class="bottle-card" style="margin-bottom:12px">
+                  <div style="font-size:14px;font-weight:500;margin-bottom:12px;color:var(--text)">${esc(fr.name||`Smak ${fi+1}`)}</div>
+                  <div style="border:1px solid var(--border);border-radius:var(--radius);padding:6px 14px;margin-bottom:10px">
+                    ${starInput('Sødme','sweetness',fr.sweetness,fi)}
+                    ${starInput('Syrlighet','acidity',fr.acidity,fi)}
+                    ${starInput('Kullsyre','carbonation',fr.carbonation,fi)}
+                    ${starInput('Helhetsvurdering','overall',fr.overall,fi)}
+                  </div>
+                  <textarea placeholder="Smaksnotater..." rows="2"
+                    oninput="formState.results.flavorRatings[${fi}].notes=this.value"
+                    style="width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);resize:vertical"
+                    >${esc(fr.notes)}</textarea>
+                </div>`).join('')}
+              <div class="section-label" style="margin-top:8px"><div class="section-accent" style="background:var(--teal)"></div><span>Generelle notater</span></div>
+              <div class="form-grid">
+                <div class="form-field full"><label for="f-results-notes">Notater til neste batch</label><textarea id="f-results-notes" placeholder="Hva ville du gjort annerledes?">${esc(d.results.notes)}</textarea></div>
+              </div>`;
+          }
+        }
+      }
       document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
       document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
       tab.classList.add('active');
